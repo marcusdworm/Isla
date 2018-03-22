@@ -1,0 +1,54 @@
+# Maintained by Herald Ombiga - herald.ombiga@gmail.com
+# This custom script is for integration between Cintex Asterisk system and Microsoft Dynamics CRM
+
+#!/usr/bin/perl
+use strict;
+use Asterisk::AGI;
+use LWP::UserAgent;
+use HTTP::Request::Common;
+
+my $AGI = new Asterisk::AGI;
+my %input = $AGI->ReadParse();
+
+# grab the caller id
+my $caller_id = $AGI->get_variable("CALLERID(number)");
+$caller_id =~ s/^2//;
+
+
+# grab the agents channel
+my $chan = $AGI->get_variable("CDR(dstchannel)");
+
+# grab the queue number
+my $queue_num = $AGI->get_variable("QUEUENUM");
+
+# get the agent's ip
+$chan =~ /Agent\/(\d+)/;
+my $agent = $1;
+my $sippeers = `/usr/sbin/asterisk -rx \"sip show peers\" | /bin/grep \"$agent/$agent \"`;
+my @sippeer_info = split(/\s+/, $sippeers);
+my $ip = $sippeer_info[1];
+
+
+
+my $marketinglistID = $AGI->get_variable("MarketingListID");    # marketinglist ID
+
+my $userAgent = LWP::UserAgent->new();
+push @{ $userAgent->requests_redirectable }, 'POST';
+$userAgent->timeout( 2 );                                     # timeout 180 seconds, i.e. 3 minutes
+
+my $webpage = "http://${ip}:5000";
+
+my $response = $userAgent->post(
+    $webpage,{
+        "TYPE" => "VOIP",
+        "ANI" => "1500",
+        "DNIS" => $caller_id,
+        "phonenumber" => $caller_id,
+        "campaignid" => $queue_num,
+        "marketinglistid" => $marketinglistID                   # send the marketinglist ID
+    }
+);
+
+exit(0);
+
+
